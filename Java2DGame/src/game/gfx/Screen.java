@@ -1,62 +1,86 @@
-package game.gfx;
+package game.gfx;  // Add this package declaration
+
+import java.util.Arrays;  // Add this import
 
 public class Screen {
+    public static final int MAP_WIDTH = 256;
+    public static final int MAP_WIDTH_MASK = MAP_WIDTH - 1;
+    public static final int TILE_SIZE = 32;
+    
+    private int[] backBuffer;
+    public int[] pixels;
+    public int[] tiles = new int[MAP_WIDTH * MAP_WIDTH];
+    
+    public int width;
+    public int height;
+    public int xOffset;
+    public int yOffset;
+    
+    public SpriteSheet sheet;
 
-	public static final int MAP_WIDTH = 64;
-	public static final int MAP_WIDTH_MASK = MAP_WIDTH - 1;
+    public Screen(int width, int height, SpriteSheet sheet) {
+        this.width = width;
+        this.height = height;
+        this.sheet = sheet;
+        this.pixels = new int[width * height];
+        this.backBuffer = new int[width * height];
+        
+        // Initialize tiles with grass/dirt pattern
+        for (int i = 0; i < tiles.length; i++) {
+            tiles[i] = (i % 16 < 8) ? 0 : 1; // Alternate between two tile types
+        }
+    }
 
-	public int[] tiles = new int[MAP_WIDTH * MAP_WIDTH];
-	public int[] colours = new int[MAP_WIDTH * MAP_WIDTH * 4];
+	public void render() {
+        Arrays.fill(backBuffer, 0); // Clear with black
+        
+        // Calculate visible tile bounds
+        int xTileStart = xOffset / TILE_SIZE;
+        int yTileStart = yOffset / TILE_SIZE;
+        int xTileEnd = (xOffset + width) / TILE_SIZE;
+        int yTileEnd = (yOffset + height) / TILE_SIZE;
+        
+        // Render each visible tile
+        for (int yTile = yTileStart; yTile <= yTileEnd; yTile++) {
+            for (int xTile = xTileStart; xTile <= xTileEnd; xTile++) {
+                renderTile(xTile, yTile);
+            }
+        }
+        
+        // Swap buffers
+        int[] temp = pixels;
+        pixels = backBuffer;
+        backBuffer = temp;
+    }
 
-	public int xOffset = 0;
-	public int yOffset = 0;
-
-	public int width;
-	public int height;
-
-	public SpriteSheet sheet;
-
-	public Screen(int width, int height, SpriteSheet sheet) {
-		this.width = width;
-		this.height = height;
-		this.sheet = sheet;
-
-		for (int i = 0; i < MAP_WIDTH * MAP_WIDTH; i++) {
-			colours[i * 4 + 0] = 0xff00ff;
-			colours[i * 4 + 1] = 0x00ffff;
-			colours[i * 4 + 2] = 0xffff00;
-			colours[i * 4 + 3] = 0xffffff;
-		}
-	}
-
-	public void render(int[] pixels, int offset, int row) {
-		for (int yTile = yOffset >> 3; yTile <= (yOffset + height) >> 3; yTile++) {
-			int yMin = yTile * 8 - yOffset;
-			int yMax = yMin + 8;
-
-			if (yMin < 0) yMin = 0;
-			if (yMax > height) yMax = height;
-				
-			for (int xTile = xOffset >> 3; xTile <= (xOffset + width) >> 3; xTile++) {
-				int xMin = xTile * 8 - xOffset;
-				int xMax = xMin + 8;
-
-				if (xMin < 0) xMin = 0;
-				if (xMax > width) xMax = width;
-				
-				int tileIndex = (xTile & (MAP_WIDTH_MASK))+ (yTile & (MAP_WIDTH_MASK)) * MAP_WIDTH;
-				
-				for(int y = yMin; y < yMax; y++) {
-					int sheetPixel = ((y + yOffset) & 7) * sheet.width + ((xMin + xOffset)& 7);
-					int tilePixel = offset + xMin + y *row;
-					
-					for(int x = xMin; x< xMax; x++) {
-						int colour = tileIndex * 4 + sheet.pixels[sheetPixel++];
-						pixels[tilePixel++] = colours[colour];
-					}
-				}
-			}
-		}
-	}
-
+    private void renderTile(int xTile, int yTile) {
+        int tileIndex = (xTile & MAP_WIDTH_MASK) + (yTile & MAP_WIDTH_MASK) * MAP_WIDTH;
+        int tileId = tiles[tileIndex];
+        
+        // Calculate position in sprite sheet
+        int tilesPerRow = sheet.width / TILE_SIZE;
+        int sheetX = (tileId % tilesPerRow) * TILE_SIZE;
+        int sheetY = (tileId / tilesPerRow) * TILE_SIZE;
+        
+        // Calculate screen position
+        int screenX = xTile * TILE_SIZE - xOffset;
+        int screenY = yTile * TILE_SIZE - yOffset;
+        
+        // Render each pixel in the tile
+        for (int y = 0; y < TILE_SIZE; y++) {
+            for (int x = 0; x < TILE_SIZE; x++) {
+                // Skip if outside screen bounds
+                if (screenX + x < 0 || screenX + x >= width || 
+                    screenY + y < 0 || screenY + y >= height) {
+                    continue;
+                }
+                
+                // Get pixel from sprite sheet
+                int sheetPixel = sheetX + x + (sheetY + y) * sheet.width;
+                if (sheetPixel >= 0 && sheetPixel < sheet.pixels.length) {
+                    backBuffer[(screenX + x) + (screenY + y) * width] = sheet.pixels[sheetPixel];
+                }
+            }
+        }
+    }
 }

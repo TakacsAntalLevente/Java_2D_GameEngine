@@ -19,7 +19,7 @@ public class Game extends Canvas implements Runnable {
 
 	public static final int WIDTH = 160;
 	public static final int HEIGHT = WIDTH / 12 * 9;
-	public static final int SCALE = 3;
+	public static final int SCALE = 4;
 	public static final String NAME = "Game";
 
 	private JFrame frame;
@@ -28,8 +28,11 @@ public class Game extends Canvas implements Runnable {
 	public int tickCount = 0;
 	//hi
 
-	private BufferedImage image = new BufferedImage(WIDTH, HEIGHT, BufferedImage.TYPE_INT_RGB);
-	private int[] pixels = ((DataBufferInt) image.getRaster().getDataBuffer()).getData();
+	//private BufferedImage image = new BufferedImage(WIDTH, HEIGHT, BufferedImage.TYPE_INT_RGB);
+	//private int[] pixels = ((DataBufferInt) image.getRaster().getDataBuffer()).getData();
+
+	private BufferedImage image;
+    private int[] pixels;
 
 	private Screen screen;
 
@@ -50,11 +53,28 @@ public class Game extends Canvas implements Runnable {
 		frame.setResizable(false);
 		frame.setLocationRelativeTo(null);
 		frame.setVisible(true);
+
+		image = new BufferedImage(WIDTH, HEIGHT, BufferedImage.TYPE_INT_RGB);
+        pixels = ((DataBufferInt) image.getRaster().getDataBuffer()).getData();
 	}
 
 	public void init() {
-		screen = new Screen(WIDTH, HEIGHT, new SpriteSheet("/sprite sheet.png"));
+		// Load sprite sheet
+		SpriteSheet sheet = new SpriteSheet("/FieldsTile_11.png"); // Update with your actual filename
+		
+		// Verify sprite sheet loaded correctly
+		if (sheet.pixels == null) {
+			System.err.println("ERROR: Failed to load sprite sheet!");
+			System.exit(1);
+		}
+		
+		screen = new Screen(WIDTH, HEIGHT, sheet);
 		input = new InputHandler(this);
+		
+		// Initialize tiles with more interesting pattern
+		for (int i = 0; i < screen.tiles.length; i++) {
+			screen.tiles[i] = (i % 8); // Use first 8 tiles from sheet
+		}
 	}
 
 	public synchronized void start() {
@@ -69,52 +89,53 @@ public class Game extends Canvas implements Runnable {
 	}
 
 	public void run() {
-		long lastTime = System.nanoTime();
-		double nsPerTick = 1000000000D / 60D;
+        long lastTime = System.nanoTime();
+        double nsPerTick = 1000000000D / 60D;
+        double delta = 0;
+        
+        init();
+        
+        while (running) {
+            long now = System.nanoTime();
+            delta += (now - lastTime) / nsPerTick;
+            lastTime = now;
+            
+            while (delta >= 1) {
+                tick();
+                delta--;
+            }
+            
+            render();
+            
+            // Cap at 60 FPS
+            try {
+                Thread.sleep(2);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+    
+    public void render() {
+        // Render game to screen's pixel buffer
+        screen.render();
+        
+        // Copy screen pixels to our image buffer
+        System.arraycopy(screen.pixels, 0, pixels, 0, pixels.length);
+        
+        // Draw to screen with triple buffering
+        BufferStrategy bs = getBufferStrategy();
+        if (bs == null) {
+            createBufferStrategy(3);
+            return;
+        }
+        
+        Graphics g = bs.getDrawGraphics();
+        g.drawImage(image, 0, 0, getWidth(), getHeight(), null);
+        g.dispose();
+        bs.show();
+    }
 
-		int frames = 0;
-		int ticks = 0;
-
-		long lastTimer = System.currentTimeMillis();
-		double delta = 0;
-
-		init();
-
-		while (running) {
-			long now = System.nanoTime();
-			delta += (now - lastTime) / nsPerTick;
-			lastTime = now;
-
-			boolean shouldRender = true;
-
-			while (delta >= 1) {
-				ticks++;
-				tick();
-				delta -= 1;
-				shouldRender = true;
-			}
-
-			try {
-				Thread.sleep(2);
-			} catch (InterruptedException e) {
-
-				e.printStackTrace();
-			}
-
-			if (shouldRender) {
-				frames++;
-				render();
-			}
-
-			if (System.currentTimeMillis() - lastTimer >= 1000) {
-				lastTimer += 1000;
-				System.out.println("Frames: " + frames + ", ticks: " + ticks);
-				frames = 0;
-				ticks = 0;
-			}
-
-		}
-	}
 
 	public void tick() {
 		tickCount++;
@@ -134,21 +155,7 @@ public class Game extends Canvas implements Runnable {
 
 	}
 
-	public void render() {
-		BufferStrategy bs = getBufferStrategy();
-		if (bs == null) {
-			createBufferStrategy(3);
-			return;
-		}
-
-		screen.render(pixels, 0, WIDTH);
-
-		Graphics g = bs.getDrawGraphics();
-		g.drawImage(image, 0, 0, getWidth(), getHeight(), null);
-
-		g.dispose();
-		bs.show();
-	}
+	
 
 	public static void main(String[] args) {
 		new Game().start();
